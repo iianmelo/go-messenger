@@ -1,0 +1,55 @@
+@startuml arquitetura
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName DejaVu Sans
+skinparam defaultFontSize 14
+skinparam dpi 140
+skinparam ranksep 28
+skinparam nodesep 16
+skinparam linetype ortho
+skinparam packageStyle rectangle
+skinparam rectangleBackgroundColor #FFFFFF
+skinparam rectangleBorderColor #000000
+skinparam databaseBackgroundColor #FFFFFF
+skinparam databaseBorderColor #000000
+skinparam arrowColor #000000
+
+title Componentes em execução
+
+rectangle "Cliente HTTP" as cli
+rectangle "Fiber v2.52.5\n:3000" as app
+
+rectangle "POST /auth\ncontrollers.Login" as login
+rectangle "GET /debug\nsem autenticação" as debug
+rectangle "FirebaseAuthMiddleware\nVerifyIDToken" as mw
+rectangle "GET /user\ncontrollers.GetUser" as getuser
+rectangle "services.GetUser\nsem SELECT" as svc
+
+rectangle "Identity Toolkit\nsignInWithPassword" as itk
+rectangle "Firebase Auth\nAdmin SDK" as fb
+database "PostgreSQL\npublic.users" as pg
+
+rectangle "InitFirebaseAuth\nmain(), antes do Listen" as init
+rectangle "ConnectDb\nmain(), antes do Listen\nAutoMigrate models.User" as conn
+
+cli --> app
+app --> login
+app --> debug
+app --> mw
+mw --> getuser : token aceito
+getuser --> svc
+login --> itk : FIREBASE_API_KEY
+mw --> fb : ID token
+init --> fb : conta de serviço
+conn --> pg : na subida
+
+login -[hidden]right- debug
+debug -[hidden]right- mw
+getuser -[hidden]down- svc
+itk -[hidden]right- init
+init -[hidden]right- conn
+fb -[hidden]right- pg
+svc -[hidden]down- itk
+@enduml

@@ -1,0 +1,95 @@
+' docs/sequencia-login-usuario.png empilha as duas figuras deste arquivo.
+@startuml sequencia-login
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName DejaVu Sans
+skinparam defaultFontSize 14
+skinparam dpi 130
+skinparam sequenceMessageAlign left
+skinparam responseMessageBelowArrow true
+skinparam sequenceArrowThickness 1
+skinparam ParticipantPadding 8
+skinparam sequenceBoxBackgroundColor #FFFFFF
+skinparam sequenceBoxBorderColor #000000
+skinparam participantBackgroundColor #FFFFFF
+skinparam participantBorderColor #000000
+skinparam arrowColor #000000
+hide footbox
+
+title POST /auth — controllers.Login
+
+participant "Cliente" as C
+participant "Fiber :3000" as F
+participant "Login" as L
+participant "Identity Toolkit" as I
+
+C -> F : POST /auth\n{email, password}
+F -> L : Login(ctx)
+
+alt corpo inválido
+  L --> C : 400 Invalid request body
+else e-mail ou senha vazios
+  L --> C : 400 Email and password are required
+else FIREBASE_API_KEY ausente
+  L --> C : 500 Firebase API key not found
+else chama o Google
+  L -> I : signInWithPassword
+  alt falha de rede
+    L --> C : 500 Failed to authenticate with Firebase
+  else status ≠ 200
+    I --> L : erro
+    L --> C : 401 Invalid email or password
+  else status 200
+    I --> L : idToken
+    alt JSON ilegível
+      L --> C : 500 Failed to parse Firebase response
+    else
+      L --> C : 200 {"token": idToken}
+    end
+  end
+end
+@enduml
+
+@startuml sequencia-user
+skinparam monochrome true
+skinparam shadowing false
+skinparam roundcorner 0
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName DejaVu Sans
+skinparam defaultFontSize 14
+skinparam dpi 130
+skinparam sequenceMessageAlign left
+skinparam responseMessageBelowArrow true
+skinparam sequenceArrowThickness 1
+skinparam ParticipantPadding 8
+skinparam sequenceBoxBackgroundColor #FFFFFF
+skinparam sequenceBoxBorderColor #000000
+skinparam participantBackgroundColor #FFFFFF
+skinparam participantBorderColor #000000
+skinparam arrowColor #000000
+hide footbox
+
+title GET /user — middleware e serviço
+
+participant "Cliente" as C
+participant "Fiber :3000" as F
+participant "FirebaseAuthMiddleware" as M
+participant "GetUser" as G
+participant "services.GetUser" as S
+
+C -> F : GET /user\nAuthorization: Bearer <token>
+F -> M : invoca o middleware
+
+alt header ausente
+  M --> C : 401 Authorization header missing
+else VerifyIDToken recusa
+  M --> C : 401 Invalid or expired token
+else token aceito
+  M -> G : Next()\nLocals("meta", token)
+  G -> S : GetUser()
+  S --> G : {ID: 1, Name: "John Doe"}
+  G --> C : 200 JSON da struct
+end
+@enduml
