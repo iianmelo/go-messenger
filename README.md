@@ -9,7 +9,6 @@ API HTTP em Go para a autenticação de um mensageiro. O processo sobe com [Fibe
 
 ## Sumário
 
-- [Contexto](#contexto)
 - [Funcionalidades](#funcionalidades)
 - [Arquitetura](#arquitetura)
 - [Como funciona](#como-funciona)
@@ -19,19 +18,6 @@ API HTTP em Go para a autenticação de um mensageiro. O processo sobe com [Fibe
 - [Estado atual](#estado-atual)
 - [Aprendizados](#aprendizados)
 - [Ligações](#ligações)
-
-## Contexto
-
-Repositório de Ian Medeiros Melo (`iianmelo`). No git, os commits dele estão assinados como Ian Melo, com o e-mail `imm2@cin.ufpe.br`. A implementação está em 15 commits, de 5 a 20 de dezembro de 2024.
-
-Nesses commits aparecem dois autores:
-
-- Manoel Lira de Carvalho (`Mlcarvalho1`) escreveu a estrutura HTTP, o desenho do gopher em `app.go`, o Firebase Auth, o PostgreSQL e os cenários de mensagem privada, mensagem em grupo e recebimento.
-- Ian Melo, em 15 de dezembro de 2024, adicionou `features/listagem_chats.feature` e `features/pesquisa_chats.feature` e fez o merge do pull request #1, vindo de `Mlcarvalho1/features`.
-
-Não há neste repositório lista de equipe, período letivo, nota ou métrica de uso. Os merges citam `Mlcarvalho1/go-messenger`; esse repositório continua público. Este README não trata os dois como o mesmo remoto.
-
-O repositório relacionado [go-messager-ui](https://github.com/iianmelo/go-messager-ui) se apresenta, no README dele, como base de front-end em Next.js da disciplina de Engenharia de Software e Sistemas do Centro de Informática (CIn) da UFPE. Essa frase não está nos arquivos daqui. Os cenários de listagem e de pesquisa de lá repetem os que foram commitados aqui, com edições posteriores. Na `main` daquele repositório, o formulário de login não dispara requisição e o `baseURL` do Playwright está comentado. Nada neste código chama o front-end, nem o contrário.
 
 ## Funcionalidades
 
