@@ -7,8 +7,20 @@ import (
 
 	firebase "firebase.google.com/go"
 	"firebase.google.com/go/auth"
+
+	common "go.messenger/Common"
+	"go.messenger/config"
 	"google.golang.org/api/option"
 )
+
+// OptionalFirebaseAuth starts the Admin SDK only in Firebase mode.
+// Local mode returns nil so the process can boot without a service account.
+func OptionalFirebaseAuth() *auth.Client {
+	if config.LocalMode() {
+		return nil
+	}
+	return InitFirebaseAuth()
+}
 
 func InitFirebaseAuth() *auth.Client {
 	serviceAccount, fileExi := os.LookupEnv("SERVICE_ACCOUNT_JSON")
@@ -30,6 +42,8 @@ func InitFirebaseAuth() *auth.Client {
 	if err != nil {
 		panic(err)
 	}
+
+	common.FireAuth = authClient
 
 	return authClient
 }

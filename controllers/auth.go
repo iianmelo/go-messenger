@@ -7,7 +7,12 @@ import (
 	"net/http"
 	"os"
 
+	"firebase.google.com/go/auth"
 	"github.com/gofiber/fiber/v2"
+	"go.messenger/config"
+	"go.messenger/database"
+	"go.messenger/models"
+	"go.messenger/services"
 )
 
 type LoginRequest struct {
@@ -27,6 +32,10 @@ func Login(c *fiber.Ctx) error {
 
 	if payload.Email == "" || payload.Password == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Email and password are required"})
+	}
+
+	if config.LocalMode() {
+		return localLogin(c, payload)
 	}
 
 	firebaseApiKey, fileExi := os.LookupEnv("FIREBASE_API_KEY")
@@ -59,5 +68,46 @@ func Login(c *fiber.Ctx) error {
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"token": firebaseResponse.IDToken,
+	})
+}
+
+func localLogin(c *fiber.Ctx, payload LoginRequest) error {
+	var user models.User
+	if err := database.DB.Db.Where("email = ?", payload.Email).First(&user).Error; err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid email or password"})
+	}
+	if !services.CheckPassword(user.Password, payload.Password) {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid email or password"})
+	}
+	token, err := services.IssueToken(user)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to issue token"})
+	}
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"token": token,
+		"user":  services.PublicUser(user),
+	})
+}
+
+func Signup(c *fiber.Ctx, authClient *auth.Client) error {
+	var payload services.SignupPayload
+
+	if err := c.BodyParser(&payload); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
+	}
+
+	user, err := services.CreateUser(payload, authClient)
+	if err != nil {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message": "User created successfully",
+		"user": fiber.Map{
+			"id":    user.ID,
+			"name":  user.Name,
+			"email": user.Email,
+			"photo": user.Avatar,
+		},
 	})
 }

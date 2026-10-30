@@ -1,11 +1,12 @@
 # go-messenger
 
 [![Go 1.22.3](https://img.shields.io/badge/Go-1.22.3-00ADD8?style=flat&logo=go&logoColor=white)](https://go.dev/)
-[![Fiber 2.52.5](https://img.shields.io/badge/Fiber-2.52.5-222222?style=flat)](https://docs.gofiber.io/)
+[![Fiber 2.52.6](https://img.shields.io/badge/Fiber-2.52.6-222222?style=flat)](https://docs.gofiber.io/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-GORM-336791?style=flat&logo=postgresql&logoColor=white)](https://gorm.io/)
-[![Firebase Auth](https://img.shields.io/badge/Firebase-Auth-222222?style=flat)](https://firebase.google.com/docs/auth)
 
-API HTTP em Go para a autenticação de um mensageiro. O processo sobe com [Fiber](https://docs.gofiber.io/) na porta 3000, troca e-mail e senha por um ID token do Firebase e cria a tabela `users` no PostgreSQL. O envio, o recebimento, a listagem e a pesquisa de chats estão escritos em Gherkin e ainda não têm rota neste servidor.
+API HTTP em Go para o mensageiro. O processo sobe com [Fiber](https://docs.gofiber.io/) na porta 3000, guarda usuários e conversas no PostgreSQL e entrega mensagem em tempo real por WebSocket. O front-end que consome estes caminhos é [go-messager-ui](https://github.com/iianmelo/go-messager-ui).
+
+O histórico de chats, grupos e socket veio do repositório da equipe, [Mlcarvalho1/go-messenger](https://github.com/Mlcarvalho1/go-messenger) (`master`, `5fbdc0c`). Este fork acrescenta o modo local: `AUTH_MODE=local` emite um JWT e sobe sem conta de serviço do Firebase.
 
 ## Sumário
 
@@ -14,207 +15,195 @@ API HTTP em Go para a autenticação de um mensageiro. O processo sobe com [Fibe
 - [Como funciona](#como-funciona)
 - [Demonstração](#demonstração)
 - [Como executar](#como-executar)
+- [Testes](#testes)
 - [Estrutura do repositório](#estrutura-do-repositório)
 - [Estado atual](#estado-atual)
-- [Aprendizados](#aprendizados)
 - [Ligações](#ligações)
 
 ## Funcionalidades
 
-### O que o processo executa
+`AUTH_MODE` vazio ou `local` usa senha com bcrypt e JWT HS256 (`JWT_SECRET`). `AUTH_MODE=firebase` mantém o Identity Toolkit e o Admin SDK.
 
 | Método | Caminho | Autenticação | Comportamento |
 | --- | --- | --- | --- |
-| `POST` | `/auth` e `/auth/` | não | Lê `email` e `password`. Pede um ID token ao Identity Toolkit. Devolve `{"token":"..."}` se o Google responder 200. |
-| `GET` | `/user` | `Authorization: Bearer` | Se o ID token for aceito, devolve o usuário fixo de `services.GetUser`. |
-| `GET` | `/debug` | não | Devolve o header `Authorization` em texto puro. |
-| na subida | — | conta de serviço | `AutoMigrate` de `models.User` no PostgreSQL. |
+| `POST` | `/auth` | não | Lê `email` e `password`. No modo local devolve `{"token","user"}`. No Firebase devolve `{"token"}` com o ID token. |
+| `POST` | `/auth/sign-up` | não | Lê `name`, `email`, `password` e `photo_url`. Cria o usuário. |
+| `POST` | `/resetpassword` | não | Lê `email`. No modo local responde 200 sem enviar carta. No Firebase gera o link e usa o SendGrid. |
+| `GET` | `/chats/user` | `Bearer` | Conversas da pessoa, com `user`, `receiver` e `messages`. |
+| `GET` | `/chats` | `?token=` | WebSocket. O quadro é `{"text","receiverId"}`. |
+| `GET` | `/users` | `Bearer` | Perfil: `id`, `name`, `email`, `avatar`. |
+| `PATCH` | `/users` | `Bearer` | Atualiza `name` e `photo`. |
+| `GET` | `/users/all` | `Bearer` | Contatos, sem a própria pessoa. |
+| `GET` | `/groups/user/:userId` | `Bearer` | Chats de grupo. O front atual não chama esta rota. |
+| `POST` | `/groups` | `Bearer` | Cria grupo. |
+| `GET` | `/debug` | não | Ecoa o header `Authorization`. |
 
-Códigos que o `Login` e o middleware devolvem, lidos do código e conferidos na execução local onde dá para chegar sem um projeto Firebase:
+Códigos que o login e o middleware devolvem no modo local:
 
 | Situação | Status | Corpo |
 | --- | --- | --- |
 | JSON inválido em `/auth` | 400 | `Invalid request body` |
 | E-mail ou senha vazios | 400 | `Email and password are required` |
-| `FIREBASE_API_KEY` ausente | 500 | `Firebase API key not found` |
-| Falha de rede até o Google | 500 | `Failed to authenticate with Firebase` |
-| Identity Toolkit responde algo que não é 200 | 401 | `Invalid email or password` |
-| Header `Authorization` ausente em rota protegida | 401 | `Authorization header missing` |
-| `VerifyIDToken` recusa o token | 401 | `Invalid or expired token` |
+| E-mail desconhecido ou senha errada | 401 | `Invalid email or password` |
+| Header `Authorization` ausente | 401 | `Authorization header missing` |
+| JWT recusado | 401 | `Invalid or expired token` |
 
-Na execução de 29 de outubro de 2026 saíram o 400, os 401 e o 200 de `/debug`. O 200 de `/auth` e o 200 de `/user` dependem de um projeto Firebase real e não foram vistos.
+A pesquisa por nome acontece no navegador, sobre a lista de `GET /chats/user`. Não há query `?q=` no servidor.
 
-`GET /` também caiu no middleware e respondeu 401. A rota não tem handler próprio: o que não é registrado antes do `Use` passa pela verificação do token.
+Na primeira subida com a tabela `users` vazia, e com `SEED` diferente de `false`, o processo grava seis pessoas e quatro conversas em português. A senha de todas é `senha123`.
 
-### O que está só nos arquivos `.feature`
+| Nome | E-mail |
+| --- | --- |
+| Ana Bezerra | ana.bezerra@cin.ufpe.br |
+| Carlos Lima | carlos.lima@cin.ufpe.br |
+| Mariana Souza | mariana.souza@cin.ufpe.br |
+| João Victor Rocha | joao.rocha@cin.ufpe.br |
+| Pedro Alves | pedro.alves@cin.ufpe.br |
+| Beatriz Nunes | beatriz.nunes@cin.ufpe.br |
 
-Não há `godog` nem outro runner no `go.mod`. São especificações, não testes que rodam.
-
-| Arquivo | Feature | Cenários | Commit |
-| --- | --- | --- | --- |
-| `features/messages.feature` | Envio de mensagem privada | sucesso, falha de rede, reenvio | Manoel Lira de Carvalho |
-| `features/groupMessages.feature` | Envio em grupo | sucesso, falha de rede com ícone de erro | Manoel Lira de Carvalho |
-| `features/messageReceive.feature` | Recebimento | contato ou grupo, dentro e fora do chat, não lida / lida | Manoel Lira de Carvalho |
-| `features/listagem_chats.feature` | Lista de chats | lista com itens na ordem da mensagem mais recente, lista vazia, abrir um chat | Ian Melo |
-| `features/pesquisa_chats.feature` | Pesquisa por nome | com correspondência e sem correspondência (`"não foram encontrados chats"`) | Ian Melo |
-
-Não existe tabela de mensagem, de chat ou de grupo. Não existe WebSocket, fila ou fan-out.
+Beatriz entra só na lista de contatos. As conversas de Ana estão com João, Carlos, Mariana e Pedro, nesta ordem de mensagem mais recente.
 
 ## Arquitetura
 
-O código separa rota, controller, serviço, modelo e banco. Não há camada de view: a resposta é JSON ou texto. O nome MVC do README antigo descreve essa pasta, não uma interface renderizada no servidor.
-
 <p align="center">
-  <img src="docs/arquitetura.png" alt="Diagrama de componentes: Cliente HTTP, Fiber na porta 3000, login, debug, middleware, GET /user, Identity Toolkit, Firebase Auth e PostgreSQL">
+  <img src="docs/arquitetura.png" alt="Diagrama: Next.js, Fiber na porta 3000, login, chats, usuários, JWT local, Firebase e PostgreSQL">
 </p>
-
-<p align="center"><em>Componentes que o processo liga. <code>services.GetUser</code> não se conecta ao PostgreSQL: esse serviço não faz SELECT.</em></p>
 
 Fonte editável: [`docs/arquitetura.puml`](docs/arquitetura.puml).
 
-Na subida, `main` faz três coisas, nesta ordem:
+Na subida, `main` faz o seguinte:
 
-1. `godotenv.Load()` no `init`. Se não houver `.env`, segue e registra `No .env file found`.
-2. `database.InitFirebaseAuth()`, que lê `SERVICE_ACCOUNT_JSON` e abre o cliente Admin do Firebase. Sem essa variável o processo encerra.
-3. `database.ConnectDb()`, que abre o PostgreSQL e roda `AutoMigrate` de `models.User`. Se a conexão falha, o processo encerra.
+1. `godotenv.Load()` no `init`. Sem `.env`, segue e registra `No .env file found`.
+2. Se `AUTH_MODE=firebase`, abre o cliente Admin. No modo local esse passo não roda.
+3. `database.ConnectDb()` abre o PostgreSQL, migra `User`, `Chat`, `Group` e `GroupMember` e, se a tabela estiver vazia, semeia a demonstração.
+4. Registra as rotas, inclusive o CORS, e escuta em `:3000`.
 
-Depois registra as rotas e escuta em `:3000`.
-
-Protocolos usados pelo código da aplicação:
-
-- HTTP/1.1, JSON, atendido pelo Fiber 2.52.5 (fasthttp).
-- HTTPS de saída para `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword`.
-- Verificação do ID token pelo Admin SDK do Firebase Auth.
-- PostgreSQL, pelo driver pgx do GORM.
-
-Não há goroutine, canal nem mutex no código da aplicação. Quem atende requisições em paralelo é o servidor Fiber. Não há concorrência de entrega de mensagem porque essa entrega não foi implementada.
-
-O modelo persistido é só `models.User`: `gorm.Model` mais `ID`, `Name`, `Email` (`uint`) e `FireToken`. Na primeira subida contra um PostgreSQL 16.15 vazio, o `AutoMigrate` criou `public.users` com `email` do tipo `bigint`.
+O log de conexão cita host e nome do banco. A senha não é impressa.
 
 ## Como funciona
 
-O fluxo abaixo é o que está em `controllers/auth.go`, `middlewares/firebaseAuth.go`, `controllers/user.go` e `services/user.go`. Não é o fluxo de chat dos arquivos `.feature`.
-
 <p align="center">
-  <img src="docs/sequencia-login-usuario.png" alt="Diagrama de sequência de POST /auth e GET /user, com os retornos 400, 401, 500 e 200">
+  <img src="docs/sequencia-login-usuario.png" alt="Sequência do login local, da lista de chats e do WebSocket">
 </p>
-
-<p align="center"><em>Sequência implementada. A de baixo não passa pelo PostgreSQL.</em></p>
 
 Fonte: [`docs/sequencia-login-usuario.puml`](docs/sequencia-login-usuario.puml).
 
-`POST /auth` monta a URL do Identity Toolkit com `FIREBASE_API_KEY` e envia `email`, `password` e `returnSecureToken`. Qualquer status que não seja 200 vira o mesmo 401, `Invalid email or password`, sem repassar o corpo do Google. O middleware, nas rotas protegidas, tira um prefixo `Bearer ` se ele existir e chama `VerifyIDToken`. O token aceito fica em `c.Locals("meta")`. `GetUser` não lê esse valor.
+O JWT leva o identificador `local-<id>` no claim `uid`. O middleware e o socket gravam esse valor em `Locals` e acham a linha por `fire_token`. A senha fica só no bcrypt, com `json:"-"`.
 
-`services.GetUser` devolve sempre `ID` 1 e `Name` `"John Doe"`, com erro nulo. O ramo 404 de `controllers.GetUser` não roda com esse serviço.
-
-`middlewares/firebase.go` define `FirebaseMiddleware`, que guardaria um `*firebase.App` no contexto. Nenhuma rota o usa. O que está ligado é `FirebaseAuthMiddleware`.
+O quadro do socket é acrescentado ao JSON da conversa. Se ainda não existir conversa entre as duas pessoas, o servidor cria. O texto segue para o socket do destinatário quando ele está ligado. Quem envia vê a própria mensagem na hora, pelo estado do front.
 
 ## Demonstração
 
-Execução local em 29 de outubro de 2026: PostgreSQL 16.15 em `127.0.0.1:5432`, `.env` na raiz e um JSON de conta de serviço só para o processo abrir o cliente Admin. Não havia projeto Firebase nem usuário real. A senha do banco aparece no log de subida (`ConnectDb` imprime o DSN) e foi cortada destas figuras.
+Front em `http://127.0.0.1:8080` com `NEXT_PUBLIC_API_URL=http://127.0.0.1:3000` e `NEXT_PUBLIC_WS_URL=ws://127.0.0.1:3000/chats`. Conta `ana.bezerra@cin.ufpe.br`, senha `senha123`. Capturas de 30 de outubro de 2026, por volta das 7h19 no horário de Recife, em 1440×900.
 
 <p align="center">
-  <img src="docs/terminal-servidor.png" alt="Terminal do processo: banner do Fiber na porta 3000 e o log das cinco requisições">
+  <img src="docs/integracao-conversas.png" alt="Lista com quatro conversas e o histórico com João aberto">
 </p>
-
-<p align="center"><em>Processo no ar. O <code>POST /auth</code> que chegou ao Google levou cerca de 79 ms. As recusas locais ficaram na casa dos microssegundos.</em></p>
 
 <p align="center">
-  <img src="docs/terminal-requisicoes.png" alt="Terminal com curl: 401 sem token, 401 com token inválido, 400 no login vazio, 401 no Identity Toolkit e 200 em /debug">
+  <img src="docs/integracao-mensagem.png" alt="Mensagem enviada para João, alinhada à direita">
 </p>
 
-<p align="center"><em>As mesmas cinco chamadas, do lado do cliente. O 200 de <code>/user</code> não entra porque falta um ID token válido.</em></p>
+<p align="center">
+  <img src="docs/integracao-pesquisa.png" alt="Pesquisa por João, com um chat na lista">
+</p>
+
+<p align="center">
+  <img src="docs/integracao-pesquisa-vazia.png" alt="Pesquisa sem correspondência: Nenhum chat encontrado">
+</p>
+
+<p align="center">
+  <img src="docs/integracao-terminal.png" alt="Terminal do processo: modo local, semente, POST /auth, GET /chats/user e a mensagem no WebSocket">
+</p>
+
+O `101` em `GET /chats` é a troca para WebSocket. A linha `ws mensagem de 1 para 4` é Ana falando com João. João não estava com o socket aberto, então o processo registra que o usuário 4 não está conectado; a mensagem fica gravada na conversa.
 
 ## Como executar
 
-O ponto de entrada é `app.go`. `go run main.go` não acha arquivo.
-
-É preciso Go 1.22.3 (versão do `go.mod`) e um PostgreSQL que aceite a DSN montada em `database/database.go`:
-
-```text
-host=... user=... password=... dbname=... port=...
-```
-
-Não há `sslmode` nessa string. Contra um PostgreSQL local com autenticação por senha, a conexão funcionou sem esse parâmetro.
+É preciso Go 1.22.3 e um PostgreSQL que aceite a DSN de `database/database.go`.
 
 ```sql
 CREATE USER messenger WITH PASSWORD 'senha';
 CREATE DATABASE messenger OWNER messenger;
 ```
 
-No console do Firebase, baixe o JSON da conta de serviço e guarde-o fora do git (o nome `serviceAccountKey.json` já está no `.gitignore`). A chave Web do mesmo projeto vai em `FIREBASE_API_KEY`. Sem um projeto real, o processo sobe e as rotas de erro respondem; o login não emite token.
-
 ```bash
 cp .env.example .env
-# edite DB_PASSWORD, FIREBASE_API_KEY e SERVICE_ACCOUNT_JSON
-
 go run app.go
 ```
 
-O `.env` precisa estar no diretório de trabalho, porque o `godotenv` lê `./.env`.
+O `.env` precisa estar no diretório de trabalho. O exemplo já deixa `AUTH_MODE=local`.
+
+Com Docker, a partir da raiz:
 
 ```bash
-curl -i http://127.0.0.1:3000/user
+docker compose up --build
+```
 
-curl -i -H 'Content-Type: application/json' \
-  -d '{"email":"voce@exemplo.com","password":"senha"}' \
+O compose sobe o Postgres 16 e a API na porta 3000, com a semente ligada.
+
+O front, no modo API:
+
+```bash
+NEXT_PUBLIC_API_URL=http://127.0.0.1:3000
+NEXT_PUBLIC_WS_URL=ws://127.0.0.1:3000/chats
+```
+
+Sem `NEXT_PUBLIC_API_URL` o front continua na demonstração local e não chama esta API. O README de `go-messager-ui` ainda descreve a API como só Firebase. A frase a acrescentar lá é: o modo local usa as duas variáveis acima e a conta `ana.bezerra@cin.ufpe.br` / `senha123`.
+
+```bash
+curl -s -H 'Content-Type: application/json' \
+  -d '{"email":"ana.bezerra@cin.ufpe.br","password":"senha123"}' \
   http://127.0.0.1:3000/auth
 
-curl -i -H "Authorization: Bearer SEU_ID_TOKEN" \
-  http://127.0.0.1:3000/user
+curl -s -H "Authorization: Bearer SEU_TOKEN" \
+  http://127.0.0.1:3000/chats/user
 ```
+
+## Testes
+
+```bash
+go test ./tests/api
+```
+
+O pacote cobre login, perfil, contatos, ordem da lista, cadastro com lista vazia, troca de senha no modo local, atualização de perfil e a gravação da mensagem que chega pelo WebSocket. Usa o banco `messenger_test` em `127.0.0.1`.
+
+`make test-integration` só roda com `RUN_FIREBASE_TESTS=1`. Esses arquivos batem no Identity Toolkit e ficam de fora do `go test ./...` comum.
+
+Os `.feature` continuam a especificação de tela. Não há `godog`: os cenários falam de página, ícone e botão, e a pesquisa e a lista vazia são texto do front (`Nenhum chat encontrado`, `Nenhuma conversa ainda`). O ícone de falha de rede e o reenvio descritos em `features/messages.feature` não têm ramo no socket.
 
 ## Estrutura do repositório
 
 ```text
 go-messenger/
-├── app.go                         entrada: Fiber, Firebase, Postgres, :3000
+├── app.go
+├── config/                 AUTH_MODE e segredo do JWT
 ├── controllers/
-│   ├── auth.go                    POST /auth → Identity Toolkit
-│   └── user.go                    GET /user
-├── database/
-│   ├── database.go                GORM e AutoMigrate
-│   └── firebaseConfig.go          cliente Admin do Firebase Auth
-├── features/                      cenários Gherkin, sem runner
+├── database/               conexão, migração e semente
+├── features/               Gherkin, sem runner
 ├── middlewares/
-│   ├── firebase.go                não usado pelas rotas
-│   └── firebaseAuth.go            VerifyIDToken
-├── models/user.go
+├── models/
 ├── routes/
-├── services/user.go               usuário fixo, sem SELECT
-├── docs/                          diagramas PlantUML e capturas
-├── .env.example
-└── README.md
+├── services/
+├── tests/api/              testes do modo local
+├── tests/integration/      testes antigos, só com Firebase
+├── webSockets/
+├── docker-compose.yml
+├── Dockerfile
+└── docs/
 ```
 
 ## Estado atual
 
-Coisas visíveis no código, para não ler o diagrama como se o chat já existisse:
-
-- `services.GetUser` não lê nem grava `users`. A tabela nasce na subida e o handler não a consulta.
-- `Email` é `uint`. A coluna migrada foi `bigint`, não texto.
-- A struct declara `ID` e também embute `gorm.Model`, que tem outro `ID`. Um `json.Marshal` da struct devolvida pelo serviço produz os dois, `ID` 0 e `id` 1. Isso não foi capturado no HTTP.
-- `ConnectDb` imprime a DSN, com a senha, via `print`, sem quebra de linha antes do log seguinte.
-- `GET /debug` ecoa o header `Authorization` e não passa pelo middleware.
-- Login, middleware e serviço não registram mensagem, chat, grupo, leitura nem reenvio. Esses fluxos param nos `.feature`.
-
-## Aprendizados
-
-O que o repositório deixa verificar, sem nota e sem métrica inventada:
-
-- Especificação e servidor estão separados de propósito ou por estágio. Os `.feature` descrevem o produto de chat; o binário que escuta cobre conta e token.
-- A senha não é coluna do Postgres. Ela sai na chamada ao Identity Toolkit. O que o middleware confere depois é o ID token, com a conta de serviço.
-- `AutoMigrate` acompanha o tipo Go. `Email uint` virou `bigint` na tabela criada.
-- Dois repositórios podem repetir o mesmo cenário de lista e de pesquisa e ainda não se falar por HTTP. Foi o caso deste backend e de `go-messager-ui` na revisão da `main` de dezembro de 2024.
-- O log de acesso mostra a diferença: recusa local em microssegundos, ida ao Identity Toolkit na casa de 79 ms. O número é desta execução, não um benchmark.
+- A lista do front ordena pelo horário da última mensagem. A semente grava João por último na conversa mais nova, então ele abre primeiro.
+- `GET /groups/user/:userId` e `POST /groups` existem por causa do upstream. A tela de chats deste front é só conversa entre duas pessoas.
+- No modo local, `POST /resetpassword` confirma o pedido e não manda e-mail.
+- O front desenha a mensagem enviada na hora. Se o socket cair antes do `send`, o balão continua na tela e o servidor não recebe o texto. Não há ícone de erro nem botão de reenvio.
 
 ## Ligações
 
 - Este repositório: [github.com/iianmelo/go-messenger](https://github.com/iianmelo/go-messenger)
-- Front-end relacionado: [github.com/iianmelo/go-messager-ui](https://github.com/iianmelo/go-messager-ui)
-- Histórico citado nos merges: [github.com/Mlcarvalho1/go-messenger](https://github.com/Mlcarvalho1/go-messenger)
+- Upstream: [github.com/Mlcarvalho1/go-messenger](https://github.com/Mlcarvalho1/go-messenger)
+- Front-end: [github.com/iianmelo/go-messager-ui](https://github.com/iianmelo/go-messager-ui)
 - [Fiber](https://docs.gofiber.io/)
-- [Firebase Auth — sign-in com senha](https://firebase.google.com/docs/reference/rest/auth#section-sign-in-email-password)
 - [GORM](https://gorm.io/docs/)
-
-O campo homepage de `go-messager-ui` aponta para `https://go-message-iota.vercel.app`. Um GET nessa URL, em 29 de outubro de 2026, respondeu 404. Não há demonstração publicada deste servidor.

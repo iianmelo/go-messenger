@@ -18,7 +18,6 @@ type Dbinstance struct {
 var DB Dbinstance
 
 func ConnectDb() {
-	print("connecting to db")
 	dsn := fmt.Sprintf(
 		"host=%s user=%s password=%s dbname=%s port=%s",
 		os.Getenv("DB_HOST"),
@@ -28,21 +27,24 @@ func ConnectDb() {
 		os.Getenv("DB_PORT"),
 	)
 
-	print(dsn)
+	log.Printf("connecting to postgres host=%s db=%s", os.Getenv("DB_HOST"), os.Getenv("DB_NAME"))
 
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Info),
+		Logger: logger.Default.LogMode(logger.Warn),
 	})
 	if err != nil {
 		log.Fatal("Failed to connect to database. \n", err)
 	}
 
 	log.Println("connected")
-	db.Logger = logger.Default.LogMode(logger.Info)
 	log.Println("running migrations")
 	db.AutoMigrate(&models.User{})
+	db.AutoMigrate(&models.Chat{})
+	db.AutoMigrate(&models.Group{})
+	db.AutoMigrate(&models.GroupMember{})
 
 	DB = Dbinstance{
 		Db: db,
 	}
+	SeedIfEmpty()
 }
