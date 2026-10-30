@@ -1,5 +1,8 @@
+test:
+	go test ./tests/api
+
 test-integration:
-	go test -v ./tests/integration
+	RUN_FIREBASE_TESTS=1 go test -v ./tests/integration
 
 test-integration-html: test-cover
 	go tool cover -html=./tests/coverage/coverage.out -o ./tests/coverage/coverage.html

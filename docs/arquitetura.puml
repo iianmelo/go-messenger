@@ -4,10 +4,10 @@ skinparam shadowing false
 skinparam roundcorner 0
 skinparam backgroundColor #FFFFFF
 skinparam defaultFontName DejaVu Sans
-skinparam defaultFontSize 14
+skinparam defaultFontSize 13
 skinparam dpi 140
-skinparam ranksep 28
-skinparam nodesep 16
+skinparam ranksep 22
+skinparam nodesep 18
 skinparam linetype ortho
 skinparam packageStyle rectangle
 skinparam rectangleBackgroundColor #FFFFFF
@@ -18,38 +18,30 @@ skinparam arrowColor #000000
 
 title Componentes em execução
 
-rectangle "Cliente HTTP" as cli
-rectangle "Fiber v2.52.5\n:3000" as app
+rectangle "Next.js\ngo-messager-ui" as ui
+rectangle "Fiber :3000\nCORS liberado" as app
 
-rectangle "POST /auth\ncontrollers.Login" as login
-rectangle "GET /debug\nsem autenticação" as debug
-rectangle "FirebaseAuthMiddleware\nVerifyIDToken" as mw
-rectangle "GET /user\ncontrollers.GetUser" as getuser
-rectangle "services.GetUser\nsem SELECT" as svc
+rectangle "POST /auth\nPOST /auth/sign-up\nPOST /resetpassword" as auth
+rectangle "GET /chats/user\nWebSocket /chats" as chats
+rectangle "GET /users\nPATCH /users\nGET /users/all" as users
 
-rectangle "Identity Toolkit\nsignInWithPassword" as itk
-rectangle "Firebase Auth\nAdmin SDK" as fb
-database "PostgreSQL\npublic.users" as pg
+rectangle "AUTH_MODE=local\nJWT HS256\n(padrão)" as jwt
+rectangle "AUTH_MODE=firebase\nIdentity Toolkit" as fb
+database "PostgreSQL\nusers, chats, groups" as pg
 
-rectangle "InitFirebaseAuth\nmain(), antes do Listen" as init
-rectangle "ConnectDb\nmain(), antes do Listen\nAutoMigrate models.User" as conn
+ui -down-> app : HTTP e WebSocket
+app -down-> auth
+app -down-> chats
+app -down-> users
+auth -down-> jwt
+auth -down-> fb
+chats -down-> pg
+users -down-> pg
+jwt -down-> pg
+fb -down-> pg
 
-cli --> app
-app --> login
-app --> debug
-app --> mw
-mw --> getuser : token aceito
-getuser --> svc
-login --> itk : FIREBASE_API_KEY
-mw --> fb : ID token
-init --> fb : conta de serviço
-conn --> pg : na subida
-
-login -[hidden]right- debug
-debug -[hidden]right- mw
-getuser -[hidden]down- svc
-itk -[hidden]right- init
-init -[hidden]right- conn
+jwt -[hidden]right- fb
 fb -[hidden]right- pg
-svc -[hidden]down- itk
+auth -[hidden]right- chats
+chats -[hidden]right- users
 @enduml

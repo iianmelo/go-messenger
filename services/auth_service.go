@@ -3,8 +3,10 @@ package services
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"firebase.google.com/go/auth"
+	"go.messenger/config"
 	"go.messenger/database"
 	"go.messenger/models"
 )
@@ -20,6 +22,10 @@ type SignupPayload struct {
 func CreateUser(payload SignupPayload, authClient *auth.Client) (*models.User, error) {
 	if payload.Email == "" || payload.Password == "" || payload.Name == "" {
 		return nil, errors.New("name, email, and password are required")
+	}
+
+	if config.LocalMode() {
+		return createLocalUser(payload)
 	}
 
 	if payload.PhotoURL == "" {
@@ -60,5 +66,33 @@ func CreateUser(payload SignupPayload, authClient *auth.Client) (*models.User, e
 		return nil, errors.New("failed to create user in database")
 	}
 
+	return user, nil
+}
+
+func createLocalUser(payload SignupPayload) (*models.User, error) {
+	hash, err := HashPassword(payload.Password)
+	if err != nil {
+		return nil, err
+	}
+
+	db := database.DB.Db
+	if db == nil {
+		return nil, errors.New("failed to connect to database")
+	}
+
+	user := &models.User{
+		Name:     payload.Name,
+		Email:    payload.Email,
+		Password: hash,
+		Avatar:   payload.PhotoURL,
+	}
+	if err := db.Create(user).Error; err != nil {
+		return nil, errors.New("failed to create user in database")
+	}
+
+	user.FireToken = fmt.Sprintf("local-%d", user.ID)
+	if err := db.Model(user).Update("fire_token", user.FireToken).Error; err != nil {
+		return nil, errors.New("failed to create user in database")
+	}
 	return user, nil
 }

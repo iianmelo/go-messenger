@@ -18,10 +18,10 @@ func GetUser(id int) (models.User, error) {
 	return user, nil
 }
 
-func GetUsers() ([]models.User, error) {
+func GetUsers(exceptID uint) ([]models.User, error) {
 	var users []models.User
 
-	result := database.DB.Db.Select("id", "name", "email", "avatar").Where("id > 1").Order("name").Find(&users)
+	result := database.DB.Db.Select("id", "name", "email", "avatar").Where("id <> ?", exceptID).Order("name").Find(&users)
 	if result.Error != nil {
 		return nil, result.Error
 	}

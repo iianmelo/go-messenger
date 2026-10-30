@@ -11,7 +11,7 @@ type User struct {
 	Email     string `json:"email" gorm:"unique"`
 	Password  string `json:"-"` // Hidden from JSON
 	Avatar    string `json:"avatar"`
-	FireToken string `json:"fire_token,omitempty"`
+	FireToken string `json:"-"`
 
 	// Override gorm.Model fields to exclude them from JSON response
 	CreatedAt string `json:"created_at,omitempty" gorm:"-"`

@@ -1,8 +1,6 @@
 package controllers
 
 import (
-	"fmt"
-
 	"github.com/gofiber/fiber/v2"
 	"go.messenger/database"
 	"go.messenger/models"
@@ -15,14 +13,12 @@ func GetUser(c *fiber.Ctx) error {
 	var user models.User
 
 	result := database.DB.Db.First(&user, "fire_token = ?", firebaseId)
-	fmt.Println("User found:", user)
 
 	if result.Error != nil {
-		fmt.Println("Error finding user:", result.Error)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "User not found"})
 	}
 
-	return c.Status(fiber.StatusOK).JSON(user)
+	return c.Status(fiber.StatusOK).JSON(services.PublicUser(user))
 }
 
 type UserUpdates struct {
@@ -49,7 +45,6 @@ func UpdateUser(c *fiber.Ctx) error {
 	result := database.DB.Db.First(&user, "fire_token = ?", firebaseId)
 
 	if result.Error != nil {
-		fmt.Println("Error finding user:", result.Error)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "User not found"})
 	}
 
@@ -60,14 +55,24 @@ func UpdateUser(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update user"})
 	}
 
-	return c.Status(fiber.StatusOK).JSON(user)
+	return c.Status(fiber.StatusOK).JSON(services.PublicUser(user))
 }
 
 func GetUsers(c *fiber.Ctx) error {
-	contacts, err := services.GetUsers()
+	current, err := currentUser(c)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "User not found"})
+	}
+	contacts, err := services.GetUsers(current.ID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Contacts not found"})
 	}
 
 	return c.Status(fiber.StatusOK).JSON(contacts)
+}
+
+func currentUser(c *fiber.Ctx) (models.User, error) {
+	var user models.User
+	err := database.DB.Db.First(&user, "fire_token = ?", c.Locals("firebaseId")).Error
+	return user, err
 }

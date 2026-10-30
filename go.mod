@@ -4,11 +4,14 @@ go 1.22.3
 
 require (
 	firebase.google.com/go v3.13.0+incompatible
+	github.com/fasthttp/websocket v1.5.3
 	github.com/gofiber/fiber/v2 v2.52.6
 	github.com/gofiber/websocket/v2 v2.2.1
+	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/joho/godotenv v1.5.1
 	github.com/sendgrid/sendgrid-go v3.16.0+incompatible
 	github.com/stretchr/testify v1.10.0
+	golang.org/x/crypto v0.32.0
 	google.golang.org/api v0.196.0
 	gorm.io/datatypes v1.2.5
 	gorm.io/driver/postgres v1.5.11
@@ -27,7 +30,6 @@ require (
 	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/andybalholm/brotli v1.1.1 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/fasthttp/websocket v1.5.3 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
@@ -63,7 +65,6 @@ require (
 	go.opentelemetry.io/otel v1.29.0 // indirect
 	go.opentelemetry.io/otel/metric v1.29.0 // indirect
 	go.opentelemetry.io/otel/trace v1.29.0 // indirect
-	golang.org/x/crypto v0.32.0 // indirect
 	golang.org/x/net v0.34.0 // indirect
 	golang.org/x/oauth2 v0.22.0 // indirect
 	golang.org/x/sync v0.10.0 // indirect

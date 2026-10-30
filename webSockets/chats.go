@@ -10,8 +10,10 @@ import (
 
 	"firebase.google.com/go/auth"
 	"github.com/gofiber/websocket/v2"
+	"go.messenger/config"
 	"go.messenger/database"
 	"go.messenger/models"
+	"go.messenger/services"
 	"gorm.io/gorm"
 )
 
@@ -19,6 +21,7 @@ type Message struct {
 	Text       string       `json:"text"`
 	SenderId   uint         `json:"senderId"`
 	ReceiverId uint         `json:"receiverId"`
+	Name       string       `json:"name"`
 	Chat       *models.Chat `json:"-"`
 	Time       time.Time    `json:"time"`
 }
@@ -47,15 +50,11 @@ func (s *WebSocketServer) HandleWebSocket(ctx *websocket.Conn) {
 		return
 	}
 
-	// Valida o token com Firebase
-	token, err := s.AuthClient.VerifyIDToken(context.Background(), tokenString)
-	if err != nil {
-		log.Println("Invalid token:", err)
+	firebaseId, ok := s.sessionID(tokenString)
+	if !ok {
 		ctx.Close()
 		return
 	}
-
-	firebaseId := token.UID
 
 	var user models.User
 	result := database.DB.Db.First(&user, "fire_token = ?", firebaseId)
@@ -91,12 +90,12 @@ func (s *WebSocketServer) HandleWebSocket(ctx *websocket.Conn) {
 		var message Message
 		var chat models.Chat
 
-		message.SenderId = user.ID
-
 		if err := json.Unmarshal(msg, &message); err != nil {
 			log.Println("Error Unmarshalling:", err)
 			continue
 		}
+		message.SenderId = user.ID
+		message.Name = user.Name
 
 		result := database.DB.Db.Where(
 			"(user_id = ? AND receiver_id = ?) OR (user_id = ? AND receiver_id = ?)",
@@ -163,6 +162,7 @@ func (s *WebSocketServer) HandleMessages() {
 			log.Printf("Error updating chat messages: %v", err)
 			continue
 		}
+		log.Printf("ws mensagem de %d para %d", msg.SenderId, msg.ReceiverId)
 
 		// Find the recipient and send the message
 		s.mu.Lock()
@@ -183,4 +183,25 @@ func (s *WebSocketServer) HandleMessages() {
 			log.Printf("User %d is not connected", msg.ReceiverId)
 		}
 	}
+}
+
+func (s *WebSocketServer) sessionID(tokenString string) (string, bool) {
+	if config.LocalMode() {
+		uid, err := services.ParseToken(tokenString)
+		if err != nil {
+			log.Println("Invalid token:", err)
+			return "", false
+		}
+		return uid, true
+	}
+	if s.AuthClient == nil {
+		log.Println("Firebase auth client not initialized")
+		return "", false
+	}
+	token, err := s.AuthClient.VerifyIDToken(context.Background(), tokenString)
+	if err != nil {
+		log.Println("Invalid token:", err)
+		return "", false
+	}
+	return token.UID, true
 }

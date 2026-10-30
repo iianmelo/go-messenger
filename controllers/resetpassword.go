@@ -9,6 +9,7 @@ import (
 	"github.com/sendgrid/sendgrid-go"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
 	common "go.messenger/Common"
+	"go.messenger/config"
 	"go.messenger/services"
 )
 
@@ -54,6 +55,12 @@ func PasswordReset(c *fiber.Ctx) error {
 
 	if !isValidEmail(request.Email) {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid email format"})
+	}
+
+	if config.LocalMode() {
+		return c.Status(fiber.StatusOK).JSON(fiber.Map{
+			"message": "Password reset link sent",
+		})
 	}
 
 	authClient := common.FireAuth // Reuse the initialized Firebase Auth client
